@@ -78,3 +78,16 @@ def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
     print(f"Fetched {len(df)} bars. Date range: {df.index[0]} to {df.index[-1]}")
     
     return df[['open', 'high', 'low', 'close', 'volume']]
+
+
+
+
+# Volatility and Entropy functions
+def rolling_entropy(x, window=60, bins=20):
+    #Compute rolling Shannon entropy of residuals.
+    def ent(v):
+        p, _ = np.histogram(v, bins=bins, density=True)
+        p = p[p > 0]
+        return -np.sum(p * np.log(p)) if len(p) > 0 else 0  # Shannon entropy Formula 
+    
+    return x.rolling(window).apply(ent, raw=True)
