@@ -171,7 +171,9 @@ def simulate_cyber_gbm(S0, mu, sigma_series, H, M, params, bar_sigma2,
 def simulate_mc(S0, mu, sigma_series, H, M, bar_sigma2, nu, 
                 n_sims=10_000, n_steps=1, info_filter=None, redundancy=None):
     
-    base_params = {'alpha': 0.5, 'delta': 0.3, 'gamma': 0.2, 'eta': 1e-3}
+    # Calibrated parameters for ~95% coverage target
+    # Reduced alpha (0.5 → 0.40) and delta (0.3 → 0.15) to narrow ranges
+    base_params = {'alpha': 0.40, 'delta': 0.15, 'gamma': 0.2, 'eta': 1e-3}
     out = np.zeros((n_sims, n_steps + 1))
     
     for i in range(n_sims):
