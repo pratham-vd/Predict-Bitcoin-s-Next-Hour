@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import FormatStrFormatter
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import scipy.stats as stats
 from arch import arch_model
 from tqdm import tqdm
@@ -15,11 +15,11 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='arch')
 
 
-# Fetch BTCUSDT 1H data from Binance
+# 1. Fetch BTCUSDT 1H data from Binance
 def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
 
-    # No API key needed
-    end_time = datetime.utcnow()
+    # No API key needed - fully public.
+    end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
     
     all_data = []
