@@ -15,10 +15,10 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='arch')
 
 
-# 1. Fetch BTCUSDT 1H data from Binance
+# 1. Fetch BTCUSDT 1H Data from Binance
+# Returns DataFrame with OHLCV data, indexed by timestamp, No API key needed fully public.
 def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
 
-    # No API key needed - fully public.
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=days)
     
@@ -53,7 +53,7 @@ def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
             
             # Move to next batch (last timestamp + 1 interval)
             last_time_ms = klines[-1][0]
-            current_time = datetime.fromtimestamp(last_time_ms / 1000)
+            current_time = datetime.fromtimestamp(last_time_ms / 1000, tz=timezone.utc)
             current_time += timedelta(hours=1)
             
         except Exception as e:
@@ -90,7 +90,7 @@ def rolling_entropy(x, window=60, bins=20):
     def ent(v):
         p, _ = np.histogram(v, bins=bins, density=True)
         p = p[p > 0]
-        return -np.sum(p * np.log(p)) if len(p) > 0 else 0  # Shannon entropy Formula 
+        return -np.sum(p * np.log(p)) if len(p) > 0 else 0  #Shannon entropy Formula 
     
     return x.rolling(window).apply(ent, raw=True)
 
@@ -100,23 +100,23 @@ def rolling_entropy(x, window=60, bins=20):
 def simulate_cyber_gbm(S0, mu, sigma_series, H, M, params, bar_sigma2, 
                        n_steps, dt=1, eps=1e-6, nu=4, info_filter=None, 
                        redundancy=None):
-
-    #     # Inputs:
-    #     S0: initial price
-    #     mu: drift (mean log return)
-    #     sigma_series: FIGARCH-estimated volatility series
-    #     H: entropy series
-    #     M: rolling momentum (abs returns)
-    #     params: dict with alpha, delta, gamma, kappa, eta
-    #     bar_sigma2: average historical variance
-    #     n_steps: number of simulation steps ahead
-    #     dt: time step (1 hour = 1)
-    #     nu: degrees of freedom for Student-t
-    #     info_filter: binary filter for high-information periods
-    #     redundancy: multiplier for market microstructure
+    #Inputs:
+    #S0: initial price
+    #mu: drift (mean log return)
+    #sigma_series: FIGARCH-estimated volatility series
+    #H: entropy series
+    #M: rolling momentum (abs returns)
+    #params: dict with alpha, delta, gamma, kappa, eta
+    #bar_sigma2: average historical variance
+    #n_steps: number of simulation steps ahead
+    #dt: time step (1 hour = 1)
+    #nu: degrees of freedom for Student-t
+    #info_filter: binary filter for high-information periods
+    #redundancy: multiplier for market microstructure
+    
     # Returns:
-    #     S: price path (length n_steps + 1)
-    #     V: volatility path
+    #S: price path (length n_steps + 1)
+    #V: volatility path
 
     S = np.zeros(n_steps + 1)
     V = np.zeros(n_steps + 1)
