@@ -185,3 +185,133 @@ def simulate_mc(S0, mu, sigma_series, H, M, bar_sigma2, nu,
     
     return out
 
+
+
+# 4. Backtest function
+def backtest_btc_hourly(prices, train_window=168, test_window=None, n_sims=10_000):
+
+    # 30-day backtest on BTCUSDT 1-hour bars.
+    # KEY CONSTRAINT: At bar i, only use data up to bar i-1.
+    # No lookahead bias.
+    
+    # Inputs:
+    #     prices: Series of closing prices, already sorted
+    #     train_window: hours to use for volatility estimation (default 1 week = 168)
+    #     test_window: hours to test (default = len(prices) - train_window)
+    #     n_sims: Monte Carlo simulations per prediction
+    
+    # Returns:
+    #     DataFrame with predictions and actuals
+    
+    log_ret = np.log(prices / prices.shift(1)).dropna()
+    
+    if test_window is None:
+        test_window = len(prices) - train_window - 1
+    
+    results = []
+    
+    print(f"\nBacktesting {test_window} hourly predictions...")
+    print(f"Training window: {train_window} hours, Simulations per bar: {n_sims}")
+    
+    # Loop: for each test bar i, predict bar i+1 using only data up to bar i
+    for i in tqdm(range(train_window, train_window + test_window)):
+        # DATA UP TO BAR i (no peeking at bar i+1)
+        train_ret = log_ret.iloc[i - train_window:i]  # Up to bar i-1
+        train_prices = prices.iloc[i - train_window:i + 1]  # Prices for training
+        
+        if len(train_ret) < 50:
+            continue  # Skip if not enough data
+        
+        #ESTIMATE VOLATILITY WITH FIGARCH
+        try:
+            am = arch_model(train_ret * 100, vol='FIGARCH', 
+                           p=1, o=0, q=1, dist='studentst')
+            res = am.fit(disp='off', rescale=False)
+            sigma_fig = res.conditional_volatility / 100
+            resid = (train_ret * 100 - res.params['mu']) / res.conditional_volatility
+            nu = max(4, stats.t.fit(resid, floc=0, fscale=1)[0])
+        except:
+            # Fallback to simple volatility
+            sigma_fig = pd.Series([train_ret.std()] * len(train_ret))
+            resid = train_ret / train_ret.std()
+            nu = 4
+        
+        #COMPUTE ENTROPY & MOMENTUM
+        H_series = rolling_entropy(resid).iloc[:-1] if len(resid) > 60 else pd.Series(np.ones(len(resid)))
+        M_series = train_ret.abs().rolling(60).mean() if len(train_ret) > 60 else pd.Series(np.ones(len(train_ret)))
+        
+        bar_sigma2 = (sigma_fig**2).mean()
+        info_filter = (H_series > H_series.mean()).astype(float) if len(H_series) > 0 else None
+        
+        # Redundancy (price momentum)
+        try:
+            redundancy = 1 + 0.1 * np.log1p(train_prices.rolling(5).var() / train_prices.rolling(20).var())
+            redundancy = redundancy.iloc[:-1]
+        except:
+            redundancy = pd.Series(np.ones(len(train_ret)))
+        
+        #PREDICT NEXT HOUR (bar i+1)
+        S0 = prices.iloc[i]  # Current price (bar i close)
+        mu = train_ret.mean()
+        
+        # Ensure series align for simulation
+        sigma_fig_trim = sigma_fig.iloc[:-1] if len(sigma_fig) > len(H_series) else sigma_fig
+        
+        paths = simulate_mc(
+            S0, mu, sigma_fig_trim, H_series, M_series, bar_sigma2, nu,
+            n_sims=n_sims, n_steps=1,
+            info_filter=info_filter, redundancy=redundancy
+        )
+        
+        # Extract 95% confidence interval from 10k simulations
+        S_t1 = paths[:, 1]
+        low_95 = np.percentile(S_t1, 2.5)
+        high_95 = np.percentile(S_t1, 97.5)
+        
+        #CHECK AGAINST ACTUAL (bar i+1)
+        actual = prices.iloc[i + 1]
+        width_95 = high_95 - low_95
+        coverage = 1 if (low_95 <= actual <= high_95) else 0
+        
+        # Winkler score
+        alpha = 0.05
+        if actual < low_95:
+            winkler = width_95 + (2 / alpha) * (low_95 - actual)
+        elif actual > high_95:
+            winkler = width_95 + (2 / alpha) * (actual - high_95)
+        else:
+            winkler = width_95
+        
+        results.append({
+            'timestamp': prices.index[i + 1],
+            'bar_index': i + 1,
+            'predicted_low': float(low_95),
+            'predicted_high': float(high_95),
+            'width': float(width_95),
+            'actual_price': float(actual),
+            'coverage': int(coverage),
+            'winkler': float(winkler),
+            'price_at_prediction_time': float(S0)
+        })
+    
+    df_results = pd.DataFrame(results)
+    return df_results
+
+
+
+# 5. Evaluation metrics
+def evaluate_predictions(df_results):
+    # Compute coverage, avg width, mean Winkler
+    coverage = df_results['coverage'].mean()
+    avg_width = df_results['width'].mean()
+    mean_winkler = df_results['winkler'].mean()
+    
+    return {
+        'coverage': coverage,
+        'avg_width': avg_width,
+        'mean_winkler': mean_winkler,
+        'n_predictions': len(df_results)
+    }
+
+
+
