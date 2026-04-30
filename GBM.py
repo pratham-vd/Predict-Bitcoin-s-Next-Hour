@@ -315,3 +315,76 @@ def evaluate_predictions(df_results):
 
 
 
+# 6. Main execution
+if __name__ == '__main__':
+
+    print("\nBTC HOURLY GBM BACKTEST")
+    
+    # Fetch data
+    df = get_binance_klines(symbol='BTCUSDT', interval='1h', days=30)
+    prices = df['close']
+    
+    
+    # Run backtest
+    backtest_df = backtest_btc_hourly(
+        prices, 
+        train_window=168,  # 1 week
+        n_sims=10_000
+    )
+    
+    # Evaluate
+    metrics = evaluate_predictions(backtest_df)
+    
+    print("\nBACKTEST RESULTS")
+    print(f"Total Predictions: {metrics['n_predictions']}")
+    print(f"Coverage: {metrics['coverage']:.4f}")
+    print(f"Average Width: ${metrics['avg_width']:.2f}")
+    print(f"Mean Winkler Score: {metrics['mean_winkler']:.4f}")
+    
+    # Save results
+    output_file = 'backtest_results.jsonl'
+    print(f"\nSaving predictions to {output_file}...")
+    with open(output_file, 'w') as f:
+        for _, row in backtest_df.iterrows():
+            row_dict = row.to_dict()
+            # Convert Timestamp to ISO string
+            if 'timestamp' in row_dict:
+                row_dict['timestamp'] = row_dict['timestamp'].isoformat()
+            f.write(json.dumps(row_dict) + '\n')
+    print(f"Saved {len(backtest_df)} predictions")
+    
+    #plot
+    try:
+        fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+        
+        # Price with predicted ranges
+        ax = axes[0]
+        ax.plot(backtest_df['timestamp'], backtest_df['actual_price'], 
+                label='Actual', color='black', linewidth=2)
+        ax.fill_between(backtest_df['timestamp'], 
+                        backtest_df['predicted_low'], 
+                        backtest_df['predicted_high'],
+                        alpha=0.3, color='blue', label='95% Predicted Range')
+        ax.set_ylabel('BTC Price (USD)')
+        ax.set_title('BTCUSDT Hourly Predictions vs Actual')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Winkler score over time
+        ax = axes[1]
+        ax.plot(backtest_df['timestamp'], backtest_df['winkler'], 
+                label='Winkler Score', color='red', alpha=0.7)
+        ax.axhline(metrics['mean_winkler'], color='green', linestyle='--',
+                   label=f'Mean: {metrics["mean_winkler"]:.2f}')
+        ax.set_ylabel('Winkler Score (lower is better)')
+        ax.set_xlabel('Time')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig('backtest_visualization.png', dpi=150)
+        print("\nSaved visualization to backtest_visualization.png")
+        plt.show()
+    except Exception as e:
+        print(f"Could not create visualization: {e}")
+    
