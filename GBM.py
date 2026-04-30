@@ -9,7 +9,10 @@ import scipy.stats as stats
 from arch import arch_model
 from tqdm import tqdm
 import json
+import warnings
 
+# Suppress arch model scaling warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='arch')
 
 
 # Fetch BTCUSDT 1H data from Binance
