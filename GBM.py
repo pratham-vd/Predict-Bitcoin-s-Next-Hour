@@ -15,6 +15,7 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='arch')
 
 
+
 # 1. Fetch BTCUSDT 1H Data from Binance
 # Returns DataFrame with OHLCV data, indexed by timestamp, No API key needed fully public.
 def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
@@ -171,9 +172,10 @@ def simulate_cyber_gbm(S0, mu, sigma_series, H, M, params, bar_sigma2,
 def simulate_mc(S0, mu, sigma_series, H, M, bar_sigma2, nu, 
                 n_sims=10_000, n_steps=1, info_filter=None, redundancy=None):
     
-    # Calibrated parameters for ~95% coverage target
-    # Reduced alpha (0.5 → 0.40) and delta (0.3 → 0.15) to narrow ranges
-    base_params = {'alpha': 0.40, 'delta': 0.15, 'gamma': 0.2, 'eta': 1e-3}
+    # Calibrated parameters for ~95% coverage target (v2 - AGGRESSIVE)
+    # Reduced alpha (0.5 → 0.28) and delta (0.3 → 0.08) to significantly narrow ranges
+    # v1 only dropped coverage by 0.4%, so v2 uses much more aggressive reductions
+    base_params = {'alpha': 0.28, 'delta': 0.08, 'gamma': 0.2, 'eta': 1e-3}
     out = np.zeros((n_sims, n_steps + 1))
     
     for i in range(n_sims):
