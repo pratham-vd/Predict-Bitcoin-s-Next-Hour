@@ -161,3 +161,24 @@ def simulate_cyber_gbm(S0, mu, sigma_series, H, M, params, bar_sigma2,
         S[t] = S[t-1] * np.exp((mu - 0.5 * sigma2) * dt + np.sqrt(sigma2 * dt) * Z)
     
     return S, V
+
+
+
+# Monte Carlo ensemble of GBM paths.
+def simulate_mc(S0, mu, sigma_series, H, M, bar_sigma2, nu, 
+                n_sims=10_000, n_steps=1, info_filter=None, redundancy=None):
+    
+    base_params = {'alpha': 0.5, 'delta': 0.3, 'gamma': 0.2, 'eta': 1e-3}
+    out = np.zeros((n_sims, n_steps + 1))
+    
+    for i in range(n_sims):
+        paths, _ = simulate_cyber_gbm(
+            S0, mu, sigma_series, H, M,
+            base_params.copy(),
+            bar_sigma2, n_steps, dt=1, 
+            nu=nu, info_filter=info_filter, redundancy=redundancy
+        )
+        out[i] = paths
+    
+    return out
+
