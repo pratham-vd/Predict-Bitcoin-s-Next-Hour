@@ -87,11 +87,16 @@ def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
 
 # 2. Volatility and Entropy functions
 def rolling_entropy(x, window=60, bins=20):
-    #Compute rolling Shannon entropy of residuals.
+    # Compute rolling Shannon entropy of residuals.
+    # FIX: use raw counts normalised to probability mass (sums to 1),
+    # NOT density=True which returns probability density (integrates to 1).
+    # density=True was off by a log(bin_width) constant — fine for relative
+    # comparisons but wrong as an absolute Shannon entropy value.
     def ent(v):
-        p, _ = np.histogram(v, bins=bins, density=True)
-        p = p[p > 0]
-        return -np.sum(p * np.log(p)) if len(p) > 0 else 0  #Shannon entropy Formula 
+        counts, _ = np.histogram(v, bins=bins)   # raw integer counts
+        p = counts / counts.sum()                 # true probability mass, sums to 1
+        p = p[p > 0]                              # drop zero bins (log(0) undefined)
+        return -np.sum(p * np.log(p)) if len(p) > 0 else 0  # Shannon entropy H = -Σ p·log(p)
     
     return x.rolling(window).apply(ent, raw=True)
 
@@ -155,7 +160,7 @@ def simulate_cyber_gbm(S0, mu, sigma_series, H, M, params, bar_sigma2,
         if idx < len(redundancy):
             sigma2 *= max(1e-12, redundancy.iloc[idx])
         if idx < len(info_filter):
-            sigma2 *= 1 + 0.5 * info_filter.iloc[idx]
+            sigma2 *= 1 + 0.1 * info_filter.iloc[idx]  # Reduced from 0.5 → 0.1
         
         sigma2 = max(eps, min(sigma2, 0.5))
         V[t] = sigma2
@@ -168,25 +173,89 @@ def simulate_cyber_gbm(S0, mu, sigma_series, H, M, params, bar_sigma2,
 
 
 
-# Monte Carlo ensemble of GBM paths.
-def simulate_mc(S0, mu, sigma_series, H, M, bar_sigma2, nu, 
+# Monte Carlo ensemble of GBM paths — fully vectorised.
+#
+# KEY INSIGHT for n_steps=1:
+#   sigma2 is 100% deterministic (same inputs → same value every simulation).
+#   Only the random shock Z differs per path.
+#   So instead of calling simulate_cyber_gbm 10,000 times in a Python loop,
+#   we compute sigma2 ONCE, then generate all 10,000 Z values in a single
+#   NumPy call and compute all prices in one array operation.
+#   This eliminates ~99% of the Python interpreter overhead.
+#
+# For n_steps > 1 the function falls back to the original loop-based approach
+# (multi-step sigma2 depends on its own previous value, harder to vectorise).
+def simulate_mc(S0, mu, sigma_series, H, M, bar_sigma2, nu,
                 n_sims=10_000, n_steps=1, info_filter=None, redundancy=None):
-    
-    # Calibrated parameters for ~95% coverage target (v2 - AGGRESSIVE)
-    # Reduced alpha (0.5 → 0.28) and delta (0.3 → 0.08) to significantly narrow ranges
-    # v1 only dropped coverage by 0.4%, so v2 uses much more aggressive reductions
-    base_params = {'alpha': 0.28, 'delta': 0.08, 'gamma': 0.2, 'eta': 1e-3}
+
+    # Calibrated parameters for ~95% coverage target (v3)
+    # alpha: 0.28 → 0.12 | delta: 0.08 → 0.03 (reduce over-inflation)
+    # info_filter multiplier: 0.5 → 0.1 (biggest coverage driver, fixed below)
+    # redundancy coefficient: 0.1 → 0.05 (fixed in backtest_btc_hourly)
+    base_params = {'alpha': 0.12, 'delta': 0.03, 'gamma': 0.2, 'eta': 1e-3}
+
+    # ------------------------------------------------------------------ #
+    #  FAST PATH — vectorised for n_steps = 1 (the only case in backtest) #
+    # ------------------------------------------------------------------ #
+    if n_steps == 1:
+        # Default missing inputs
+        if info_filter is None:
+            info_filter = pd.Series(np.ones(len(H)))
+        if redundancy is None:
+            redundancy = pd.Series(np.ones(len(H)))
+
+        eps = 1e-6
+        alpha = base_params['alpha']
+        delta = base_params['delta']
+        gamma = base_params['gamma']
+
+        # Normalise H and M to [0, 1] using their historical max
+        H_max = float(H.max()) if H.max() > 0 else 1.0
+        M_max = float(M.max()) if M.max() > 0 else 1.0
+        H_val = min(float(H.iloc[-1]) / H_max, 1.0) if len(H) > 0 else 0.0
+        M_val = min(float(M.iloc[-1]) / M_max, 1.0) if len(M) > 0 else 0.0
+
+        # Crisis flag — same logic as simulate_cyber_gbm
+        delta_t = delta if (H_val > 0.8 or M_val > 0.8) else 0.0
+
+        # Compute sigma2 once — identical for every simulation path
+        sigma2_base = float(sigma_series.iloc[-1]) ** 2
+        sigma2 = (
+            sigma2_base * (1.0 + alpha * H_val + delta_t * M_val)
+            + gamma * (bar_sigma2 - sigma2_base)
+        )
+
+        # Microstructure adjustments (same as simulate_cyber_gbm)
+        sigma2 *= max(1e-12, float(redundancy.iloc[-1]))
+        sigma2 *= 1.0 + 0.1 * float(info_filter.iloc[-1])  # Reduced from 0.5 → 0.1
+        sigma2 = max(eps, min(float(sigma2), 0.5))
+
+        # Generate ALL n_sims shocks in one NumPy call (the actual speedup)
+        # Student-t normalised so variance = 1 (matches simulate_cyber_gbm)
+        Z = np.random.standard_t(nu, size=n_sims) * np.sqrt((nu - 2.0) / nu)
+
+        # Compute all next-hour prices simultaneously — pure NumPy, no loop
+        log_ret_sim = (mu - 0.5 * sigma2) + np.sqrt(sigma2) * Z
+        S_next = S0 * np.exp(log_ret_sim)
+
+        # Return shape (n_sims, 2) to match original output: col0=S0, col1=S_next
+        out = np.empty((n_sims, 2))
+        out[:, 0] = S0
+        out[:, 1] = S_next
+        return out
+
+    # ------------------------------------------------------------------ #
+    #  SLOW PATH — original loop for n_steps > 1 (multi-step forecasting) #
+    # ------------------------------------------------------------------ #
     out = np.zeros((n_sims, n_steps + 1))
-    
     for i in range(n_sims):
         paths, _ = simulate_cyber_gbm(
             S0, mu, sigma_series, H, M,
             base_params.copy(),
-            bar_sigma2, n_steps, dt=1, 
+            bar_sigma2, n_steps, dt=1,
             nu=nu, info_filter=info_filter, redundancy=redundancy
         )
         out[i] = paths
-    
     return out
 
 
@@ -249,7 +318,7 @@ def backtest_btc_hourly(prices, train_window=168, test_window=None, n_sims=10_00
         
         # Redundancy (price momentum)
         try:
-            redundancy = 1 + 0.1 * np.log1p(train_prices.rolling(5).var() / train_prices.rolling(20).var())
+            redundancy = 1 + 0.05 * np.log1p(train_prices.rolling(5).var() / train_prices.rolling(20).var())  # Reduced from 0.1 → 0.05
             redundancy = redundancy.iloc[:-1]
         except:
             redundancy = pd.Series(np.ones(len(train_ret)))
@@ -357,38 +426,38 @@ if __name__ == '__main__':
             f.write(json.dumps(row_dict) + '\n')
     print(f"Saved {len(backtest_df)} predictions")
     
-    #plot
-    try:
-        fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+    # #plot
+    # try:
+    #     fig, axes = plt.subplots(2, 1, figsize=(14, 8))
         
-        # Price with predicted ranges
-        ax = axes[0]
-        ax.plot(backtest_df['timestamp'], backtest_df['actual_price'], 
-                label='Actual', color='black', linewidth=2)
-        ax.fill_between(backtest_df['timestamp'], 
-                        backtest_df['predicted_low'], 
-                        backtest_df['predicted_high'],
-                        alpha=0.3, color='blue', label='95% Predicted Range')
-        ax.set_ylabel('BTC Price (USD)')
-        ax.set_title('BTCUSDT Hourly Predictions vs Actual')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+    #     # Price with predicted ranges
+    #     ax = axes[0]
+    #     ax.plot(backtest_df['timestamp'], backtest_df['actual_price'], 
+    #             label='Actual', color='black', linewidth=2)
+    #     ax.fill_between(backtest_df['timestamp'], 
+    #                     backtest_df['predicted_low'], 
+    #                     backtest_df['predicted_high'],
+    #                     alpha=0.3, color='blue', label='95% Predicted Range')
+    #     ax.set_ylabel('BTC Price (USD)')
+    #     ax.set_title('BTCUSDT Hourly Predictions vs Actual')
+    #     ax.legend()
+    #     ax.grid(True, alpha=0.3)
         
-        # Winkler score over time
-        ax = axes[1]
-        ax.plot(backtest_df['timestamp'], backtest_df['winkler'], 
-                label='Winkler Score', color='red', alpha=0.7)
-        ax.axhline(metrics['mean_winkler'], color='green', linestyle='--',
-                   label=f'Mean: {metrics["mean_winkler"]:.2f}')
-        ax.set_ylabel('Winkler Score (lower is better)')
-        ax.set_xlabel('Time')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+    #     # Winkler score over time
+    #     ax = axes[1]
+    #     ax.plot(backtest_df['timestamp'], backtest_df['winkler'], 
+    #             label='Winkler Score', color='red', alpha=0.7)
+    #     ax.axhline(metrics['mean_winkler'], color='green', linestyle='--',
+    #                label=f'Mean: {metrics["mean_winkler"]:.2f}')
+    #     ax.set_ylabel('Winkler Score (lower is better)')
+    #     ax.set_xlabel('Time')
+    #     ax.legend()
+    #     ax.grid(True, alpha=0.3)
         
-        plt.tight_layout()
-        plt.savefig('backtest_visualization.png', dpi=150)
-        print("\nSaved visualization to backtest_visualization.png")
-        plt.show()
-    except Exception as e:
-        print(f"Could not create visualization: {e}")
+    #     plt.tight_layout()
+    #     plt.savefig('backtest_visualization.png', dpi=150)
+    #     print("\nSaved visualization to backtest_visualization.png")
+    #     plt.show()
+    # except Exception as e:
+    #     print(f"Could not create visualization: {e}")
     
