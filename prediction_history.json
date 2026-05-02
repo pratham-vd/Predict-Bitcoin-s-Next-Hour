@@ -43,8 +43,16 @@
     "predicted_for_hour": "2026-05-02T11:00:00",
     "predicted_low": 77740.3,
     "predicted_high": 78859.5,
+    "actual_price": 78143.08,
+    "hit": 1,
+    "saved_at": "2026-05-02T11:00:58.710720+00:00"
+  },
+  {
+    "predicted_for_hour": "2026-05-02T12:00:00",
+    "predicted_low": 77586.53,
+    "predicted_high": 78678.67,
     "actual_price": null,
     "hit": null,
-    "saved_at": "2026-05-02T11:00:58.710720+00:00"
+    "saved_at": "2026-05-02T12:00:12.741525+00:00"
   }
 ]
