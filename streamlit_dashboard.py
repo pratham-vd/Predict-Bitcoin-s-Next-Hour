@@ -231,12 +231,17 @@ def main():
         return
 
     latest_close = float(df_prices['close'].iloc[-1])
-    try:
-        resp = requests.get("https://api.binance.com/api/v3/ticker/price",
-                            params={'symbol': 'BTCUSDT'}, timeout=5)
-        current_price = float(resp.json()['price'])
-    except Exception:
-        current_price = latest_close
+    current_price = latest_close  # fallback if both ticker calls fail
+    for ticker_url in [
+        "https://api.binance.com/api/v3/ticker/price",
+        "https://api.binance.us/api/v3/ticker/price"
+    ]:
+        try:
+            resp = requests.get(ticker_url, params={'symbol': 'BTCUSDT'}, timeout=5)
+            current_price = float(resp.json()['price'])
+            break
+        except Exception:
+            continue
 
     col1, col2 = st.columns(2)
     with col1:
