@@ -29,7 +29,7 @@ def get_binance_klines(symbol='BTCUSDT', interval='1h', days=30):
         # Binance API expects milliseconds
         start_ms = int(current_time.timestamp() * 1000)
         
-        url = "https://api.binance.com/api/v3/klines"
+        url = "https://data-api.binance.vision/api/v3/klines"
         params = {
             'symbol': symbol,
             'interval': interval,
