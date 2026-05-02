@@ -1,6 +1,6 @@
 # BTC/USDT Next-Hour Price Predictor
 
-A quantitative forecasting system that predicts the 95% price range for Bitcoin one hour ahead, using Geometric Brownian Motion with FIGARCH volatility estimation and Monte Carlo simulation.
+A forecasting system that predicts the 95% price range for Bitcoin one hour ahead, using Geometric Brownian Motion with FIGARCH volatility estimation and Monte Carlo simulation.
 
 Live dashboard: https://predict-bitcoins-next-hour-mellqxzr8cl92hnfjr9hgs.streamlit.app
 
