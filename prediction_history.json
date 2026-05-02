@@ -1,0 +1,50 @@
+[
+  {
+    "predicted_for_hour": "2026-05-02T04:00:00",
+    "predicted_low": 77848.51,
+    "predicted_high": 78934.6,
+    "actual_price": 78190.79,
+    "hit": 1,
+    "saved_at": "2026-05-02T04:55:39.784551+00:00"
+  },
+  {
+    "predicted_for_hour": "2026-05-02T05:00:00",
+    "predicted_low": 77653.23,
+    "predicted_high": 78762.37,
+    "actual_price": 78174.0,
+    "hit": 1,
+    "saved_at": "2026-05-02T05:34:34.683066+00:00"
+  },
+  {
+    "predicted_for_hour": "2026-05-02T06:00:00",
+    "predicted_low": 77632.67,
+    "predicted_high": 78707.65,
+    "actual_price": 78196.61,
+    "hit": 1,
+    "saved_at": "2026-05-02T06:37:00.358715+00:00"
+  },
+  {
+    "predicted_for_hour": "2026-05-02T07:00:00",
+    "predicted_low": 77631.76,
+    "predicted_high": 78761.39,
+    "actual_price": 78220.0,
+    "hit": 1,
+    "saved_at": "2026-05-02T07:56:24.320208+00:00"
+  },
+  {
+    "predicted_for_hour": "2026-05-02T10:00:00",
+    "predicted_low": 77726.92,
+    "predicted_high": 78857.57,
+    "actual_price": 78294.2,
+    "hit": 1,
+    "saved_at": "2026-05-02T10:06:37.843336+00:00"
+  },
+  {
+    "predicted_for_hour": "2026-05-02T11:00:00",
+    "predicted_low": 77740.3,
+    "predicted_high": 78859.5,
+    "actual_price": null,
+    "hit": null,
+    "saved_at": "2026-05-02T11:00:58.710720+00:00"
+  }
+]
