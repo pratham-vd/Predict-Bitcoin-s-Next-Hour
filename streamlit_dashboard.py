@@ -231,10 +231,19 @@ def main():
         return
 
     latest_close = float(df_prices['close'].iloc[-1])
+    # Get live price from the currently forming bar using the same klines endpoint.
+    # limit=1 with no startTime returns the current open (incomplete) bar.
+    # Its close field reflects the latest traded price — no separate ticker API needed.
+    current_price = latest_close
     try:
-        resp = requests.get("https://api.binance.com/api/v3/ticker/price",
-                            params={'symbol': 'BTCUSDT'}, timeout=5)
-        current_price = float(resp.json()['price'])
+        for base_url in ["https://api.binance.com/api/v3/klines",
+                         "https://api.binance.us/api/v3/klines"]:
+            resp = requests.get(base_url,
+                                params={'symbol': 'BTCUSDT', 'interval': '1h', 'limit': 1},
+                                timeout=5)
+            if resp.status_code == 200 and resp.json():
+                current_price = float(resp.json()[0][4])
+                break
     except Exception:
         current_price = latest_close
 
