@@ -10,10 +10,9 @@ Live dashboard: https://predict-bitcoins-next-hour-mellqxzr8cl92hnfjr9hgs.stream
 
 Every hour, a new BTC/USDT candle closes on Binance. This system:
 
-1. Looks at the past 168 hours of price data
-2. Estimates current market volatility using a FIGARCH model
-3. Simulates 10,000 possible price paths for the next hour
-4. Reports the range where 95% of those paths land
+1. Estimates current market volatility using a FIGARCH model
+2. Simulates 10,000 possible price paths for the next hour
+3. Reports the range where 95% of those paths land
 
 The goal is to be right approximately 95% of the time while keeping the predicted range as narrow as possible.
 
@@ -72,16 +71,6 @@ This mirrors what a live trading system would experience — no information from
 
 **Winkler score** — a penalty-based scoring rule that rewards narrow intervals and penalizes misses heavily. If the actual price falls inside the range, the score equals the interval width. If it misses, a penalty of (2 / 0.05) times the miss distance is added. Lower is better.
 
-### Results
-
-| Metric | Value |
-|---|---|
-| Coverage | 96.19% |
-| Average Width | $1,293 |
-| Winkler Score | 1,697 |
-| Total Predictions | 551 |
-
----
 
 ## Live dashboard
 
